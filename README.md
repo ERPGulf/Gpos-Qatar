@@ -1,4 +1,4 @@
-# GPOS
+# GPOS  Qatar Edition
 
 **Gulf POS (GPOS)** is an offline-capable Point of Sale (POS) system for ERPNext, designed to work seamlessly on **Windows**.
 
