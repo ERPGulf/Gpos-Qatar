@@ -4,6 +4,8 @@ import json
 import frappe
 import urllib.parse
 import base64
+import os
+
 from werkzeug.wrappers import Response
 from frappe.utils import now_datetime
 from frappe.utils.password import get_decrypted_password
@@ -39,6 +41,7 @@ def generate_token_secure(api_key, api_secret, app_key):
             {"app_name": app_key},
             ["client_id", "client_secret", "user"],
         )
+
         doc = frappe.db.get_value(
             "OAuth Client",
             {"app_name": app_key},
@@ -732,62 +735,82 @@ def cache2():
     doc1 = frappe.cache.get_value("key")
     return doc1
 
+def get_country_phone_code(country):
+    # Path to JSON
+    json_path = os.path.join(
+        frappe.get_app_path("gpos"), "public", "country_code.js"
+    )
 
+    # Load JSON once
+    with open(json_path) as f:
+        codes = json.load(f)
+
+    # Return code or None if not found
+    return codes.get(country)
 @frappe.whitelist(allow_guest=True)
-def pos_setting(machine_name, pos_profile=None):
+def pos_setting(machine_name=None, pos_profile=None):
     systemSettings = frappe.get_doc("Claudion POS setting")
     var = True if systemSettings.show_item == 1 else False
-    Zatca_Multiple_Setting = (
-        frappe.get_doc("ZATCA Multiple Setting", machine_name) if machine_name else None
-    )
-    linked_doctype = (
-        Zatca_Multiple_Setting.custom_linked_doctype if Zatca_Multiple_Setting else None
-    )
+    # Zatca_Multiple_Setting = (
+    #     frappe.get_doc("ZATCA Multiple Setting", machine_name) if machine_name else None
+    # )
+    # linked_doctype = (
+    #     Zatca_Multiple_Setting.custom_linked_doctype if Zatca_Multiple_Setting else None
+    # )
 
-    zatca = (
-        frappe.get_doc("Company", linked_doctype)
-        if linked_doctype
-        else frappe.get_doc("Company", "Zatca Live (Demo)")
-    )
-    company = frappe.get_doc("Company", linked_doctype)
-    address = frappe.get_all(
-        "Address",
-        fields=[
-            "address_line1",
-            "address_line2",
-            "custom_building_number",
-            "city",
-            "pincode",
-            "state",
-            "country",
-        ],
-        filters=[
-            ["is_your_company_address", "=", "1"],
-            ["Dynamic Link", "link_name", "=", company.name],
-        ],
-        limit=1,
-    )
+    zatca = frappe.get_doc("Company", "Qatar Company")
+    # company = frappe.get_doc("Company", linked_doctype)
+    # address = frappe.get_all(
+    #     "Address",
+    #     fields=[
+    #         "address_line1",
+    #         "address_line2",
+    #         "custom_building_number",
+    #         "city",
+    #         "pincode",
+    #         "state",
+    #         "country",
+    #     ],
+    #     filters=[
+    #         ["is_your_company_address", "=", "1"],
+    #         ["Dynamic Link", "link_name", "=", company.name],
+    #     ],
+    #     limit=1,
+    # )
 
-    if machine_name:
-        certificate = Zatca_Multiple_Setting.custom_certficate
-        private_key = Zatca_Multiple_Setting.custom_private_key
-        public_key = Zatca_Multiple_Setting.custom_public_key
-    else:
-        certificate = zatca.custom_certificate
-        private_key = zatca.custom_private_key
-        public_key = zatca.custom_public_key
+    # use_company_values = (
+    #     Zatca_Multiple_Setting.custom_take_values_from_main_company_page
+    #     if Zatca_Multiple_Setting else False
+    # )
 
-    encoded_certificate = base64.b64encode(certificate.encode("utf-8")).decode("utf-8")
-    encoded_private_key = base64.b64encode(private_key.encode("utf-8")).decode("utf-8")
-    encoded_public_key = base64.b64encode(public_key.encode("utf-8")).decode("utf-8")
+    # if machine_name:
 
-    address_record = address[0] if address else None
+    #     certificate = zatca.custom_certificate
+    #     private_key = zatca.custom_private_key
+    #     public_key = zatca.custom_public_key
+    #     pih=zatca.custom_pih
+
+    # else:
+
+    #     pih=Zatca_Multiple_Setting.custom_pih
+    #     certificate = Zatca_Multiple_Setting.custom_certficate
+    #     private_key = Zatca_Multiple_Setting.custom_private_key
+    #     public_key = Zatca_Multiple_Setting.custom_public_key
+
+
+    # encoded_certificate = base64.b64encode(certificate.encode("utf-8")).decode("utf-8")
+    # encoded_private_key = base64.b64encode(private_key.encode("utf-8")).decode("utf-8")
+    # encoded_public_key = base64.b64encode(public_key.encode("utf-8")).decode("utf-8")
+
+    # address_record = address[0] if address else None
 
     pos_profile_doc = frappe.get_doc("POS Profile", pos_profile) if pos_profile else None
     address = pos_profile_doc.custom_address if pos_profile_doc else None
     address_details = frappe.get_doc("Address", address) if address else None
-    card_pay=pos_profile_doc.custom_cardpay_settings if pos_profile_doc else None
-    cardpay_setting=frappe.get_doc("CardPay Settings",card_pay) if card_pay else None
+    # card_pay=pos_profile_doc.custom_cardpay_settings if pos_profile_doc else None
+    # cardpay_setting=frappe.get_doc("CardPay Settings",card_pay) if card_pay else None
+
+
 
     branch_details = {
         "branch_name": pos_profile_doc.custom_branch if pos_profile_doc else None,
@@ -796,7 +819,10 @@ def pos_setting(machine_name, pos_profile=None):
         "building_no":address_details.custom_building_number if address_details else None,
         "pb_no":address_details.pincode if address_details else None,
         "phone": int(address_details.phone) if address_details else None,
-        "card_machine":bool(int(pos_profile_doc.custom_card_machine)) if pos_profile_doc and pos_profile_doc.custom_card_machine is not None else None
+        "card_machine":bool(int(pos_profile_doc.custom_card_machine)) if pos_profile_doc and pos_profile_doc.custom_card_machine is not None else None,
+       "country": pos_profile_doc.country if pos_profile_doc else None,
+        "country_code": get_country_phone_code(pos_profile_doc.country) if pos_profile_doc else None
+
     } if pos_profile_doc else None
 
     data = {
@@ -828,15 +854,15 @@ def pos_setting(machine_name, pos_profile=None):
         "tax_percentage": systemSettings.tax_percentage,
         "company_name_in_arabic": systemSettings.company_name_in_arabic,
 
-        "cardpay_settings": {
-            "id":cardpay_setting.name,
-            "secret_key":cardpay_setting.secret_key,
-            "api_key":cardpay_setting.api_key,
-            "merchant_id":cardpay_setting.merchant_id,
-            "connection_type":cardpay_setting.connection_type,
-            "company":cardpay_setting.provider,
-            "url":cardpay_setting.custom_url
-        } if card_pay else None,
+        # "cardpay_settings": {
+        #     "id":cardpay_setting.name,
+        #     "secret_key":cardpay_setting.secret_key,
+        #     "api_key":cardpay_setting.api_key,
+        #     "merchant_id":cardpay_setting.merchant_id,
+        #     "connection_type":cardpay_setting.connection_type,
+        #     "company":cardpay_setting.provider,
+        #     "url":cardpay_setting.custom_url
+        # } if card_pay else None,
         "taxes": [
             {
                 "charge_type": tax.charge_type,
@@ -849,52 +875,48 @@ def pos_setting(machine_name, pos_profile=None):
             }
             for tax in systemSettings.sales_taxes_and_charges
         ],
-        "zatca": {
-            "company_name": zatca.name,
-            "phase": zatca.custom_phase_1_or_2,
-            "company_taxid": zatca.tax_id,
-            "certificate": encoded_certificate,
-            "pih": (
-                (
-                    Zatca_Multiple_Setting.custom_pih
-                    if Zatca_Multiple_Setting
-                    else zatca.custom_pih
-                )
-                if zatca.custom_phase_1_or_2 == "Phase-2"
-                else None
-            ),
-            "Abbr": zatca.abbr,
-            "tax_id": zatca.tax_id,
-            "private_key": encoded_private_key,
-            "public_key": encoded_public_key,
-            "linked_doctype": (
-                Zatca_Multiple_Setting.custom_linked_doctype
-                if Zatca_Multiple_Setting
-                else None
-            ),
-            "company_registration_no": zatca.custom_company_registration,
-            "address": (
-                {
-                    "address_line1": (
-                        address_record.address_line1 if address_record else None
-                    ),
-                    "city": address_record.city if address_record else None,
-                    "pincode": (
-                        int(address_record.pincode)
-                        if address_record and address_record.pincode
-                        else None
-                    ),
-                    "country": address_record.country if address_record else None,
-                    "building_number": (
-                        int(address_record.custom_building_number)
-                        if address_record and address_record.custom_building_number
-                        else None
-                    ),
-                }
-                if address_record
-                else None
-            ),
-        },
+        # "zatca": {
+        #     "company_name": zatca.name,
+        #     "phase": zatca.custom_phase_1_or_2,
+        #     "company_taxid": zatca.tax_id,
+        #     "certificate": encoded_certificate,
+        #     "pih": (
+        #         pih
+        #         if zatca.custom_phase_1_or_2 == "Phase-2"
+        #         else None
+        #     ),
+        #     "Abbr": zatca.abbr,
+        #     "tax_id": zatca.tax_id,
+        #     "private_key": encoded_private_key,
+        #     "public_key": encoded_public_key,
+        #     "linked_doctype": (
+        #         Zatca_Multiple_Setting.custom_linked_doctype
+        #         if Zatca_Multiple_Setting
+        #         else None
+        #     ),
+        #     "company_registration_no": zatca.custom_company_registration,
+        #     "address": (
+        #         {
+        #             "address_line1": (
+        #                 address_record.address_line1 if address_record else None
+        #             ),
+        #             "city": address_record.city if address_record else None,
+        #             "pincode": (
+        #                 int(address_record.pincode)
+        #                 if address_record and address_record.pincode
+        #                 else None
+        #             ),
+        #             "country": address_record.country if address_record else None,
+        #             "building_number": (
+        #                 int(address_record.custom_building_number)
+        #                 if address_record and address_record.custom_building_number
+        #                 else None
+        #             ),
+        #         }
+        #         if address_record
+        #         else None
+        #     ),
+        # },
         "branch_details": branch_details,
     }
 
@@ -1255,7 +1277,6 @@ def get_number_of_files(file_storage):
 def create_invoice(
     customer_name,
     items,
-    machine_name,
     Customer_Purchase_Order=None,
     payments=None,
     discount_amount=None,
@@ -1456,7 +1477,6 @@ def create_invoice(
                 "items": invoice_items,
                 "payments": payment_items,
                 "po_no": Customer_Purchase_Order,
-                "custom_zatca_pos_name": machine_name,
                 # "disable_rounded_total" :0,
                 "is_pos": 1,
                 "custom_offline_creation_time": custom_offline_creation_time,
@@ -1467,7 +1487,7 @@ def create_invoice(
                 "cost_center": cost_center,
                 "update_stock": True,
                 "set_warehouse": source_warehouse,
-                "custom_invoice_type": "Retail",
+                # "custom_invoice_type": "Retail",
                 "taxes_and_charges": profile_taxes_and_charges,
                 "additional_discount_account": profile_discount_account,
                 "custom_transaction_id": transaction_id,
@@ -1522,13 +1542,13 @@ def create_invoice(
             mobile_no=mobile_no,
         )
 
-        zatca_setting_name = pos_settings.zatca_multiple_setting
-        if PIH:
-            frappe.db.set_value(
-                "ZATCA Multiple Setting", zatca_setting_name, "custom_pih", PIH
-            )
+        # zatca_setting_name = pos_settings.zatca_multiple_setting
+        # if PIH:
+        #     frappe.db.set_value(
+        #         "ZATCA Multiple Setting", zatca_setting_name, "custom_pih", PIH
+        #     )
 
-        doc = frappe.get_doc("ZATCA Multiple Setting", zatca_setting_name)
+        # doc = frappe.get_doc("ZATCA Multiple Setting", zatca_setting_name)
 
         item_tax_rate = None
 
@@ -1744,7 +1764,7 @@ def create_credit_note(
     customer_name,
     items,
     PIH,
-    machine_name,
+    # machine_name,
     payments=None,
     discount_amount=None,
     unique_id=None,
@@ -1891,7 +1911,7 @@ def create_credit_note(
                 "discount_amount": discount_amount,
                 "items": invoice_items,
                 "payments": payment_items,
-                "custom_zatca_pos_name": machine_name,
+                # "custom_zatca_pos_name": machine_name,
                 "is_pos": 1,
                 "is_return": 1,
                 "return_against": return_against if return_invoice else offline_no_invoice_id,
@@ -1903,7 +1923,7 @@ def create_credit_note(
                 "cost_center": cost_center,
                 "set_warehouse": source_warehouse,
                 "taxes_and_charges": profile_taxes_and_charges,
-                "custom_invoice_type": "Retail",
+                # "custom_invoice_type": "Retail",
             }
         )
 
@@ -1920,12 +1940,12 @@ def create_credit_note(
         new_invoice.save(ignore_permissions=True)
         new_invoice.submit()
 
-        zatca_setting_name = pos_settings.zatca_multiple_setting
-        frappe.db.set_value(
-            "ZATCA Multiple Setting", zatca_setting_name, "custom_pih", PIH
-        )
+        # zatca_setting_name = pos_settings.zatca_multiple_setting
+        # frappe.db.set_value(
+        #     "ZATCA Multiple Setting", zatca_setting_name, "custom_pih", PIH
+        # )
 
-        doc = frappe.get_doc("ZATCA Multiple Setting", zatca_setting_name)
+        # doc = frappe.get_doc("ZATCA Multiple Setting", zatca_setting_name)
 
 
         item_tax_rate = None
@@ -1947,7 +1967,7 @@ def create_credit_note(
             "discount_amount": new_invoice.discount_amount,
             "xml": getattr(new_invoice, "custom_xml", None),
             "qr_code": getattr(new_invoice, "custom_qr_code", None),
-            "pih": doc.custom_pih,
+            # "pih": doc.custom_pih,
             "return_against": new_invoice.return_against,
             "is_return": new_invoice.is_return,
             "items": [
